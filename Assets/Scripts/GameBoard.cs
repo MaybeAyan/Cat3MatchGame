@@ -1,47 +1,47 @@
-using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using Random = UnityEngine.Random;
-using DG.Tweening;
 using UnityEngine.UI;
+using DG.Tweening;
+using Random = UnityEngine.Random;
 
 public class GameBoard : MonoBehaviour
 {
     public static GameBoard Instance;
 
-    public int width = 10;
-    public int height = 10;
+    public int width = 8;
+    public int height = 8;
     public GameObject tilePrefab;
 
-    [Header("动画参数")] public float animationDuration = 0.3f;
+    [Header("动画参数")]
+    public float animationDuration = 0.3f;
 
-    private List<GameObject> matchedTiles = new List<GameObject>();
-    private GameObject[,] allTiles;
-
-    [Header("音频文件")] public AudioClip swapSound;
+    [Header("音频文件")]
+    public AudioClip swapSound;
     public AudioClip matchSound;
 
-    [Header("特效预制体")] public GameObject destructionEffectPrefab;
+    [Header("特效预制体")]
+    public GameObject destructionEffectPrefab;
 
-    [Header("UI布局引用")] public RectTransform tileGridPanel; // 用于放置所有Tile的容器Panel
-    private GridLayoutGroup gridLayout; // 对布局组件的引用
+    [Header("视觉调整")]
+    public float fixedSpacing = 10f; 
 
-    // 选中的方块
+    [Header("UI布局引用")]
+    public RectTransform tileGridPanel;
+    public Transform bottomLeftAnchor;
+    public Transform topRightAnchor;
+
+
+    [Header("方块美术资源")]
+    public List<Sprite> tileSprites = new List<Sprite>();
+
+    private GameObject[,] allTiles;
+    private List<GameObject> matchedTiles = new List<GameObject>();
+    private float dynamicTileSize; // 用于存储动态计算出的格子大小
     public Tile selectedTile;
 
-    public enum GameState
-    {
-        move,
-        wait
-    }
-
+    public enum GameState { move, wait }
     public GameState currentState = GameState.move;
-
-    void Start()
-    {
-        StartCoroutine(SetupBoard_Coroutine());
-    }
 
     private void Awake()
     {
@@ -53,69 +53,224 @@ public class GameBoard : MonoBehaviour
         {
             Debug.LogWarning("场景中发现多个 GameBoard 实例！");
         }
-
-        gridLayout = tileGridPanel.GetComponent<GridLayoutGroup>();
     }
 
-// 将原来的 SetupBoard() 方法替换成下面这个协程
-    private IEnumerator SetupBoard_Coroutine()
+    void Start()
     {
-        Debug.Log("启动了SetupBoard协程");
-        // 等待当前帧的末尾，此时所有UI元素的大小和位置都已经计算完毕
-        yield return new WaitForEndOfFrame();
+        SetupBoard();
+    }
 
-        // 1. 开始前先清空容器
-        foreach (Transform child in tileGridPanel)
-        {
-            Destroy(child.gameObject);
-        }
+    private Vector2 GetPositionForTile(int x, int y)
+    {
+        // 位置 = 左下角锚点 + x * (格子大小 + 间距)
+        float posX = bottomLeftAnchor.localPosition.x + x * (dynamicTileSize + fixedSpacing);
+        float posY = bottomLeftAnchor.localPosition.y + y * (dynamicTileSize + fixedSpacing);
+        return new Vector2(posX, posY);
+    }
 
-        // 2. 动态计算每个格子的大小 (现在获取到的 panelWidth 就是正确的最终值了)
-        float panelWidth = tileGridPanel.rect.width;
-        float totalSpacingWidth = gridLayout.spacing.x * (width - 1);
-        float totalPaddingWidth = gridLayout.padding.left + gridLayout.padding.right;
-        float effectiveWidth = panelWidth - totalSpacingWidth - totalPaddingWidth;
-        float cellWidth = effectiveWidth / width;
-        gridLayout.cellSize = new Vector2(cellWidth, cellWidth);
+    void SetupBoard()
+    {
+        allTiles = new GameObject[width, height];
 
-        // 3. 循环生成格子 (后续逻辑保持不变)
-        allTiles = new GameObject[width, height]; // 在生成前初始化数组
+        float areaWidth = topRightAnchor.localPosition.x - bottomLeftAnchor.localPosition.x;
+        float totalSpacingWidth = fixedSpacing * (width - 1);
+        float effectiveWidthForTiles = areaWidth - totalSpacingWidth;
+        this.dynamicTileSize = effectiveWidthForTiles / width;
+
         for (int y = 0; y < height; y++)
         {
             for (int x = 0; x < width; x++)
             {
-                GameObject tileObject = Instantiate(tilePrefab, tileGridPanel);
-                tileObject.name = $"Tile ({x},{y})";
-
-                allTiles[x, y] = tileObject;
-                Tile tileScript = tileObject.GetComponent<Tile>();
-
-                // (为方块上色和设置坐标的逻辑和之前完全一样)
-                #region Color and Data Setup
-                int randomColorIndex = Random.Range(0, 5);
-                Color newColor = GetPastelColorByIndex(randomColorIndex);
-
-                // (此处可以加上避免开局匹配的逻辑)
-                if (tileScript != null)
-                {
-                    if (tileScript.squareSprite != null)
-                        tileScript.squareSprite.color = newColor;
-                    if (tileScript.roundedSprite != null)
-                    {
-                        newColor.a = 0f;
-                        tileScript.roundedSprite.color = newColor;
-                    }
-
-                    tileScript.x = x;
-                    tileScript.y = y;
-                    tileScript.board = this;
-                }
-
-                #endregion
+                // 直接调用我们的新方法
+                SetupNewTileAt(x, y);
             }
         }
     }
 
+    private GameObject SetupNewTileAt(int x, int y)
+    {
+        GameObject tileObject = Instantiate(tilePrefab, tileGridPanel);
+        tileObject.name = $"Tile ({x},{y})";
+
+        allTiles[x, y] = tileObject;
+        Tile tileScript = tileObject.GetComponent<Tile>();
+
+        // --- 核心改动：从颜色逻辑切换到图片逻辑 ---
+
+        // 1. 从我们的图片列表中随机选择一个Sprite
+        if (tileSprites != null && tileSprites.Count > 0)
+        {
+            int spriteIndex = Random.Range(0, tileSprites.Count);
+            Sprite newSprite = tileSprites[spriteIndex];
+
+            // 2. 将这个Sprite赋给Image组件
+            if (tileScript != null)
+            {
+                tileScript.squareSprite.sprite = newSprite;
+                tileScript.roundedSprite.sprite = newSprite; // 圆角和直角的图片要保持一致
+                                                             // 将Image颜色设为白色，以显示图片的原始颜色
+                tileScript.squareSprite.color = Color.white;
+                tileScript.roundedSprite.color = new Color(1, 1, 1, 0); // 保持透明
+            }
+        }
+
+        // 3. 设置大小和位置
+        RectTransform rectTransform = tileObject.GetComponent<RectTransform>();
+        rectTransform.sizeDelta = new Vector2(dynamicTileSize, dynamicTileSize);
+        rectTransform.anchoredPosition = GetPositionForTile(x, y);
+
+        // 4. 设置数据
+        if (tileScript != null)
+        {
+            tileScript.x = x;
+            tileScript.y = y;
+            tileScript.board = this;
+        }
+
+        return tileObject;
+    }
+
+    private IEnumerator CollapseAndRefillRoutine()
+    {
+        List<Tile> movingTiles = new List<Tile>();
+
+        // 步骤1：数据下落，并收集需要移动的旧方块
+        for (int x = 0; x < width; x++)
+        {
+            for (int y = 0; y < height; y++)
+            {
+                if (allTiles[x, y] == null)
+                {
+                    for (int y2 = y + 1; y2 < height; y2++)
+                    {
+                        if (allTiles[x, y2] != null)
+                        {
+                            GameObject tileToMove = allTiles[x, y2];
+                            allTiles[x, y] = tileToMove;
+                            allTiles[x, y2] = null;
+
+                            Tile tileScript = tileToMove.GetComponent<Tile>();
+                            tileScript.y = y;
+                            movingTiles.Add(tileScript);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- 【动画修改】第一阶段：只播放旧方块的下落动画 ---
+        if (movingTiles.Count > 0)
+        {
+            Sequence collapseSequence = DOTween.Sequence();
+            foreach (var tile in movingTiles)
+            {
+                Vector2 targetPosition = GetPositionForTile(tile.x, tile.y);
+                collapseSequence.Join(tile.GetComponent<RectTransform>().DOAnchorPos(targetPosition, animationDuration).SetEase(Ease.OutBounce));
+            }
+            yield return collapseSequence.WaitForCompletion();
+        }
+
+
+        // --- 【动画修改】第二阶段：在下落动画完成后，再处理新方块的填充和掉落 ---
+        List<Tile> newTiles = new List<Tile>();
+        for (int x = 0; x < width; x++)
+        {
+            for (int y = 0; y < height; y++)
+            {
+                if (allTiles[x, y] == null)
+                {
+                    // 只创建和设置数据，动画稍后统一处理
+                    GameObject tileObject = Instantiate(tilePrefab, tileGridPanel);
+                    tileObject.name = $"Tile ({x},{y})";
+                    tileObject.GetComponent<RectTransform>().sizeDelta = new Vector2(dynamicTileSize, dynamicTileSize);
+                    allTiles[x, y] = tileObject;
+                    Tile newTileScript = tileObject.GetComponent<Tile>();
+                    #region New Tile Setup
+                    Sprite newSprite = tileSprites[Random.Range(0, tileSprites.Count)];
+                    if (newTileScript != null)
+                    {
+                        newTileScript.squareSprite.sprite = newSprite;
+                        newTileScript.roundedSprite.sprite = newSprite;
+                        newTileScript.squareSprite.color = Color.white;
+                        newTileScript.roundedSprite.color = new Color(1, 1, 1, 0);
+                        newTileScript.x = x;
+                        newTileScript.y = y;
+                        newTileScript.board = this;
+                    }
+                    #endregion
+                    newTiles.Add(newTileScript);
+                }
+            }
+        }
+
+        if (newTiles.Count > 0)
+        {
+            Sequence refillSequence = DOTween.Sequence();
+            foreach (var tile in newTiles)
+            {
+                RectTransform rectTransform = tile.GetComponent<RectTransform>();
+                Vector2 finalPos = GetPositionForTile(tile.x, tile.y);
+                rectTransform.anchoredPosition = new Vector2(finalPos.x, topRightAnchor.localPosition.y + 100);
+                refillSequence.Join(rectTransform.DOAnchorPos(finalPos, animationDuration).SetEase(Ease.OutBounce));
+            }
+            yield return refillSequence.WaitForCompletion();
+        }
+
+        FindAllMatches();
+    }
+
+    // 【回归】手动动画的SwapAndCheckRoutine
+    private IEnumerator SwapAndCheckRoutine(int x1, int y1, int x2, int y2)
+    {
+        currentState = GameState.wait;
+
+        Tile tile1Script = allTiles[x1, y1].GetComponent<Tile>();
+        Tile tile2Script = allTiles[x2, y2].GetComponent<Tile>();
+
+        if (tile1Script != null && tile2Script != null)
+        {
+            allTiles[x1, y1] = tile2Script.gameObject;
+            allTiles[x2, y2] = tile1Script.gameObject;
+            tile1Script.x = x2; tile1Script.y = y2;
+            tile2Script.x = x1; tile2Script.y = y1;
+
+            Vector2 tile1Pos = tile1Script.GetComponent<RectTransform>().anchoredPosition;
+            Vector2 tile2Pos = tile2Script.GetComponent<RectTransform>().anchoredPosition;
+
+            Sequence swapSequence = DOTween.Sequence();
+            swapSequence.Join(tile1Script.GetComponent<RectTransform>().DOAnchorPos(tile2Pos, animationDuration))
+                        .Join(tile2Script.GetComponent<RectTransform>().DOAnchorPos(tile1Pos, animationDuration));
+            yield return swapSequence.WaitForCompletion();
+
+            FindAllMatches();
+
+            if (matchedTiles.Count > 0)
+            {
+                yield return StartCoroutine(DestroyAndRefillRoutine());
+            }
+            else
+            {
+                // 如果没有匹配，数据和动画都换回来，而且播放音效；
+                AudioManager.Instance.PlaySFX(swapSound);
+
+                allTiles[x1, y1] = tile1Script.gameObject;
+                allTiles[x2, y2] = tile2Script.gameObject;
+                tile1Script.x = x1; tile1Script.y = y1;
+                tile2Script.x = x2; tile2Script.y = y2;
+
+                Sequence swapBackSequence = DOTween.Sequence();
+                swapBackSequence.Join(tile1Script.GetComponent<RectTransform>().DOAnchorPos(tile1Pos, animationDuration))
+                                .Join(tile2Script.GetComponent<RectTransform>().DOAnchorPos(tile2Pos, animationDuration));
+                yield return swapBackSequence.WaitForCompletion();
+            }
+        }
+
+        currentState = GameState.move;
+    }
+
+    // 其他方法保持我们之前修复过的最终版本即可
+    #region Other Methods
     private Color GetPastelColorByIndex(int index)
     {
         switch (index)
@@ -129,51 +284,35 @@ public class GameBoard : MonoBehaviour
         }
     }
 
-    // 一个辅助方法，用于判断两个方块是否相邻
     private bool AreTilesAdjacent(Tile tile1, Tile tile2)
     {
         if (tile1 == null || tile2 == null) return false;
-
-        // 计算两个方块在x和y轴上的距离之和
-        // 如果等于1，说明它们只在一个方向上相邻一格
         return (Mathf.Abs(tile1.x - tile2.x) + Mathf.Abs(tile1.y - tile2.y)) == 1;
     }
 
-    // 处理方块点击事件的核心方法
     public void TileClicked(Tile clickedTile)
     {
-        // 检查游戏状态是否允许操作
-        if (currentState != GameState.move)
-        {
-            return;
-        }
-
-        // 情况1：当前没有任何方块被选中
+        if (currentState != GameState.move) { return; }
         if (selectedTile == null)
         {
             selectedTile = clickedTile;
-            selectedTile.SetSelected(true); // 激活选中效果
+            selectedTile.SetSelected(true);
         }
-        // 情况2：已经有一个方块被选中
         else
         {
-            // 情况2a：点击了已经被选中的方块自己 -> 取消选中
             if (selectedTile == clickedTile)
             {
                 selectedTile.SetSelected(false);
                 selectedTile = null;
             }
-            // 情况2b：点击了另一个方块
             else
             {
-                // 如果点击的方块与已选中的方块相邻 -> 执行交换
                 if (AreTilesAdjacent(selectedTile, clickedTile))
                 {
                     selectedTile.SetSelected(false);
                     StartCoroutine(SwapAndCheckRoutine(selectedTile.x, selectedTile.y, clickedTile.x, clickedTile.y));
                     selectedTile = null;
                 }
-                // 如果不相邻 -> 将选中状态转移到新点击的方块上
                 else
                 {
                     selectedTile.SetSelected(false);
@@ -192,182 +331,13 @@ public class GameBoard : MonoBehaviour
         }
     }
 
-    private IEnumerator SwapAndCheckRoutine(int x1, int y1, int x2, int y2)
-    {
-        currentState = GameState.wait;
-
-        Tile tile1Script = allTiles[x1, y1].GetComponent<Tile>();
-        Tile tile2Script = allTiles[x2, y2].GetComponent<Tile>();
-
-        if (tile1Script != null && tile2Script != null)
-        {
-            // 交换数据
-            allTiles[x1, y1] = tile2Script.gameObject;
-            allTiles[x2, y2] = tile1Script.gameObject;
-            tile1Script.x = x2;
-            tile1Script.y = y2;
-            tile2Script.x = x1;
-            tile2Script.y = y1;
-
-            // 【UI动画交换逻辑】
-            int tile1SiblingIndex = tile1Script.transform.GetSiblingIndex();
-            int tile2SiblingIndex = tile2Script.transform.GetSiblingIndex();
-
-            Vector3 tile1Position = tile1Script.transform.position;
-            Vector3 tile2Position = tile2Script.transform.position;
-
-            // 播放交换音效
-            AudioManager.Instance.PlaySFX(swapSound);
-
-            Sequence swapSequence = DOTween.Sequence();
-            swapSequence.Join(tile1Script.transform.DOMove(tile2Position, animationDuration))
-                .Join(tile2Script.transform.DOMove(tile1Position, animationDuration));
-
-            yield return swapSequence.WaitForCompletion();
-
-            // 交换层级顺序，GridLayoutGroup会根据这个新顺序重新排列
-            tile1Script.transform.SetSiblingIndex(tile2SiblingIndex);
-            tile2Script.transform.SetSiblingIndex(tile1SiblingIndex);
-
-            FindAllMatches();
-
-            if (matchedTiles.Count > 0)
-            {
-                yield return StartCoroutine(DestroyAndRefillRoutine());
-            }
-            else // 如果没有匹配，再换回来
-            {
-                // 数据再次换回
-                allTiles[x1, y1] = tile1Script.gameObject;
-                allTiles[x2, y2] = tile2Script.gameObject;
-                tile1Script.x = x1;
-                tile1Script.y = y1;
-                tile2Script.x = x2;
-                tile2Script.y = y2;
-
-                // 动画也播放回来
-                Sequence swapBackSequence = DOTween.Sequence();
-                swapBackSequence.Join(tile1Script.transform.DOMove(tile1Position, animationDuration))
-                    .Join(tile2Script.transform.DOMove(tile2Position, animationDuration));
-                yield return swapBackSequence.WaitForCompletion();
-
-                // 层级顺序也换回来
-                tile1Script.transform.SetSiblingIndex(tile1SiblingIndex);
-                tile2Script.transform.SetSiblingIndex(tile2SiblingIndex);
-            }
-        }
-
-        currentState = GameState.move;
-    }
-
-
     private IEnumerator DestroyAndRefillRoutine()
     {
         while (matchedTiles.Count > 0)
         {
-            // 等待销毁动画和数据清理完成
             yield return StartCoroutine(DestroyMatches());
-            // 等待下落和填充动画完成
             yield return StartCoroutine(CollapseAndRefillRoutine());
         }
-    }
-
-    private IEnumerator CollapseAndRefillRoutine()
-    {
-        // --- 第一部分：数据层面的下落 ---
-        // 视觉上下落动画在GridLayoutGroup中比较复杂，我们先实现一个瞬时下落的正确逻辑
-        int nullCountInColumn = 0;
-        for (int x = 0; x < width; x++)
-        {
-            for (int y = 0; y < height; y++)
-            {
-                if (allTiles[x, y] == null)
-                {
-                    nullCountInColumn++;
-                }
-                else if (nullCountInColumn > 0)
-                {
-                    // 将上方的格子数据移动到下方的空格子
-                    allTiles[x, y - nullCountInColumn] = allTiles[x, y];
-                    allTiles[x, y] = null;
-                    // 更新格子的y坐标
-                    allTiles[x, y - nullCountInColumn].GetComponent<Tile>().y = y - nullCountInColumn;
-                }
-            }
-
-            nullCountInColumn = 0;
-        }
-
-        // --- 第二部分：刷新视觉层级，让GridLayoutGroup重新排列 ---
-        // 我们需要根据 allTiles 数组中的新顺序，来重新排列Hierarchy中的子对象顺序
-        List<GameObject> sortedTiles = new List<GameObject>();
-        for (int y = 0; y < height; y++)
-        {
-            for (int x = 0; x < width; x++)
-            {
-                if (allTiles[x, y] != null)
-                {
-                    sortedTiles.Add(allTiles[x, y]);
-                }
-            }
-        }
-
-        // 根据数据顺序，重新设置Hierarchy中的顺序
-        for (int i = 0; i < sortedTiles.Count; i++)
-        {
-            sortedTiles[i].transform.SetSiblingIndex(i);
-        }
-
-        // 等待一帧，让GridLayoutGroup完成重新布局
-        yield return new WaitForEndOfFrame();
-
-
-        // --- 第三部分：填充新元素 ---
-        Sequence refillSequence = DOTween.Sequence();
-        for (int x = 0; x < width; x++)
-        {
-            for (int y = 0; y < height; y++)
-            {
-                if (allTiles[x, y] == null)
-                {
-                    GameObject tileObject = Instantiate(tilePrefab, tileGridPanel);
-                    tileObject.name = $"Tile ({x},{y})";
-
-                    allTiles[x, y] = tileObject;
-                    Tile newTileScript = tileObject.GetComponent<Tile>();
-
-                    // (为新方块上色的逻辑)
-
-                    #region Color and Data Setup
-
-                    int randomColorIndex = Random.Range(0, 5);
-                    Color newColor = GetPastelColorByIndex(randomColorIndex);
-                    if (newTileScript != null)
-                    {
-                        if (newTileScript.squareSprite != null) newTileScript.squareSprite.color = newColor;
-                        if (newTileScript.roundedSprite != null)
-                        {
-                            newColor.a = 0f;
-                            newTileScript.roundedSprite.color = newColor;
-                        }
-
-                        newTileScript.x = x;
-                        newTileScript.y = y;
-                        newTileScript.board = this;
-                    }
-
-                    #endregion
-
-                    // 新方块的出现动画（例如，从无到有缩放出来）
-                    tileObject.transform.localScale = Vector3.zero;
-                    refillSequence.Join(tileObject.transform.DOScale(1f, animationDuration).SetEase(Ease.OutBack));
-                }
-            }
-        }
-
-        yield return refillSequence.WaitForCompletion();
-
-        FindAllMatches();
     }
 
     private void FindAllMatches()
@@ -377,60 +347,41 @@ public class GameBoard : MonoBehaviour
         {
             for (int y = 0; y < height; y++)
             {
-                GameObject currentTileObject = allTiles[x, y];
-                if (currentTileObject == null) continue;
+                if (allTiles[x, y] == null) continue;
 
-                // 【核心修复】通过 Tile 脚本去获取颜色
-                Tile currentTileScript = currentTileObject.GetComponent<Tile>();
-                if (currentTileScript == null || currentTileScript.squareSprite == null) continue; // 安全检查
-                Color currentColor = currentTileScript.squareSprite.color;
+                // 【修改】获取当前格子的Sprite
+                Tile currentTileScript = allTiles[x, y].GetComponent<Tile>();
+                if (currentTileScript == null || currentTileScript.squareSprite.sprite == null) continue;
+                Sprite currentSprite = currentTileScript.squareSprite.sprite;
 
-                // 水平检测 (向右检查两个)
+                // 水平检测
                 if (x < width - 2)
                 {
-                    GameObject tile1Object = allTiles[x + 1, y];
-                    GameObject tile2Object = allTiles[x + 2, y];
-                    if (tile1Object != null && tile2Object != null)
+                    if (allTiles[x + 1, y] != null && allTiles[x + 2, y] != null &&
+                        allTiles[x + 1, y].GetComponent<Tile>().squareSprite.sprite == currentSprite && // 比较Sprite
+                        allTiles[x + 2, y].GetComponent<Tile>().squareSprite.sprite == currentSprite)   // 比较Sprite
                     {
-                        Tile tile1Script = tile1Object.GetComponent<Tile>();
-                        Tile tile2Script = tile2Object.GetComponent<Tile>();
-
-                        if (tile1Script != null && tile2Script != null &&
-                            tile1Script.squareSprite.color == currentColor &&
-                            tile2Script.squareSprite.color == currentColor)
-                        {
-                            if (!matchedTiles.Contains(currentTileObject)) matchedTiles.Add(currentTileObject);
-                            if (!matchedTiles.Contains(tile1Object)) matchedTiles.Add(tile1Object);
-                            if (!matchedTiles.Contains(tile2Object)) matchedTiles.Add(tile2Object);
-                        }
+                        if (!matchedTiles.Contains(allTiles[x, y])) matchedTiles.Add(allTiles[x, y]);
+                        if (!matchedTiles.Contains(allTiles[x + 1, y])) matchedTiles.Add(allTiles[x + 1, y]);
+                        if (!matchedTiles.Contains(allTiles[x + 2, y])) matchedTiles.Add(allTiles[x + 2, y]);
                     }
                 }
 
-                // 垂直检测 (向上检查两个)
+                // 垂直检测
                 if (y < height - 2)
                 {
-                    GameObject tile1Object = allTiles[x, y + 1];
-                    GameObject tile2Object = allTiles[x, y + 2];
-                    if (tile1Object != null && tile2Object != null)
+                    if (allTiles[x, y + 1] != null && allTiles[x, y + 2] != null &&
+                        allTiles[x, y + 1].GetComponent<Tile>().squareSprite.sprite == currentSprite && // 比较Sprite
+                        allTiles[x, y + 2].GetComponent<Tile>().squareSprite.sprite == currentSprite)   // 比较Sprite
                     {
-                        Tile tile1Script = tile1Object.GetComponent<Tile>();
-                        Tile tile2Script = tile2Object.GetComponent<Tile>();
-
-                        if (tile1Script != null && tile2Script != null &&
-                            tile1Script.squareSprite.color == currentColor &&
-                            tile2Script.squareSprite.color == currentColor)
-                        {
-                            if (!matchedTiles.Contains(currentTileObject)) matchedTiles.Add(currentTileObject);
-                            if (!matchedTiles.Contains(tile1Object)) matchedTiles.Add(tile1Object);
-                            if (!matchedTiles.Contains(tile2Object)) matchedTiles.Add(tile2Object);
-                        }
+                        if (!matchedTiles.Contains(allTiles[x, y])) matchedTiles.Add(allTiles[x, y]);
+                        if (!matchedTiles.Contains(allTiles[x, y + 1])) matchedTiles.Add(allTiles[x, y + 1]);
+                        if (!matchedTiles.Contains(allTiles[x, y + 2])) matchedTiles.Add(allTiles[x, y + 2]);
                     }
                 }
             }
         }
     }
-
-// 在 GameBoard.cs 中
 
     private IEnumerator DestroyMatches()
     {
@@ -448,40 +399,12 @@ public class GameBoard : MonoBehaviour
         {
             if (tile != null)
             {
-                // --- 1. 播放粒子特效 ---
                 if (destructionEffectPrefab != null)
                 {
-                    // 【核心修复】通过 Tile 脚本去获取颜色，不再直接GetComponent<SpriteRenderer>()
-                    Tile tileScriptForEffect = tile.GetComponent<Tile>();
-                    if (tileScriptForEffect != null && tileScriptForEffect.squareSprite != null)
-                    {
-                        // 从正确的子对象上获取颜色
-                        Color tileColor = tileScriptForEffect.squareSprite.color;
-
-                        GameObject effect = Instantiate(destructionEffectPrefab, tile.transform.position,
-                            Quaternion.identity);
-
-                        var mainModule = effect.GetComponent<ParticleSystem>().main;
-                        mainModule.startColor = new ParticleSystem.MinMaxGradient(tileColor);
-                    }
+                    Instantiate(destructionEffectPrefab, tile.transform.position, Quaternion.identity);
                 }
 
-                // --- 2. 创建方块自身的动画序列 ---
-                Sequence tileAnimSequence = DOTween.Sequence();
-                tileAnimSequence
-                    .Append(tile.transform.DOScale(1.2f, animationDuration * 0.3f).SetEase(Ease.OutQuad))
-                    .Append(tile.transform.DOScale(0f, animationDuration * 0.7f).SetEase(Ease.InBack));
-
-                destroySequence.Join(tileAnimSequence);
-
-                // 我们需要从 Tile 脚本引用中获取 SpriteRenderer
-                Tile tileScriptForFade = tile.GetComponent<Tile>();
-                if (tileScriptForFade != null)
-                {
-                    // 同时让两个 Sprite 都淡出，确保无论选中与否，表现都正确
-                    destroySequence.Join(tileScriptForFade.squareSprite.DOFade(0f, animationDuration));
-                    destroySequence.Join(tileScriptForFade.roundedSprite.DOFade(0f, animationDuration));
-                }
+                destroySequence.Join(tile.transform.DOScale(0f, animationDuration).SetEase(Ease.InBack));
             }
         }
 
@@ -496,9 +419,9 @@ public class GameBoard : MonoBehaviour
                 {
                     allTiles[tileScript.x, tileScript.y] = null;
                 }
-
                 Destroy(tile);
             }
         }
     }
+    #endregion
 }
