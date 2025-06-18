@@ -37,11 +37,14 @@ public class Tile : MonoBehaviour, IPointerDownHandler, IPointerUpHandler, IDrag
     #region Input Handlers
     public void OnPointerDown(PointerEventData eventData)
     {
+        if (GameManager.Instance.currentState != GameManager.GameFlowState.PlayerTurn) return;
         mouseDownPosition = eventData.position;
     }
 
     public void OnPointerUp(PointerEventData eventData)
     {
+        if (GameManager.Instance.currentState != GameManager.GameFlowState.PlayerTurn) return;
+
         mouseUpPosition = eventData.position;
         float swipeDistance = Vector2.Distance(mouseDownPosition, mouseUpPosition);
 

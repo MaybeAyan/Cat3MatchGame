@@ -9,6 +9,8 @@ public class UIManager : MonoBehaviour
 
     public TextMeshProUGUI turnIndicatorText;
 
+    public PlayerTurnAnimator_TMP notificationAnimator;
+
     [Header("动画参数")]
     public float fadeDuration = 0.5f; // 淡入淡出时长
     public float displayDuration = 1.0f; // 文本停留时长
@@ -49,5 +51,20 @@ public class UIManager : MonoBehaviour
                     // 动画结束后禁用对象
                     turnIndicatorText.gameObject.SetActive(false);
                 });
+    }
+
+    public void ShowPlayerTurn()
+    {
+        notificationAnimator.PlayAnimation("玩家回合");
+    }
+
+    public void ShowEnemyTurn()
+    {
+        notificationAnimator.PlayAnimation("敌人回合");
+    }
+
+    public void ShowExtraTurn()
+    {
+        notificationAnimator.PlayAnimation("额外回合");
     }
 }

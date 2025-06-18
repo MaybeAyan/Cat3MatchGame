@@ -124,10 +124,15 @@ public class SettingsPanel : MonoBehaviour
 
     public void ClosePanel()
     {
-        // 【修复】关闭面板时，强制将游戏状态恢复为可操作，确保游戏不会卡死
-        if (GameBoard.Instance != null)
-            GameBoard.Instance.currentState = GameBoard.GameState.move;
-        
+       
+        if (GameManager.Instance != null && GameManager.Instance.currentState == GameManager.GameFlowState.PlayerTurn)
+        {
+            if (GameBoard.Instance != null)
+            {
+                GameBoard.Instance.SetBoardState(GameBoard.GameState.move);
+            }
+        }
+
         panelObject.transform.DOScale(0, 0.3f).SetEase(Ease.InBack).OnComplete(() => {
             panelObject.SetActive(false);
         });

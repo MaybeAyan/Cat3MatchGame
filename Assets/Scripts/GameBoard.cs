@@ -160,7 +160,6 @@ public class GameBoard : MonoBehaviour
         (tile1.y, tile2.y) = (tile2.y, tile1.y);
 
         // 3. 最后播放动画，移动到对方交换前的位置
-        AudioManager.Instance.PlaySFX(swapSound);
         Sequence swapSequence = DOTween.Sequence();
         swapSequence.Join(tile1.GetComponent<RectTransform>().DOAnchorPos(tile2Pos, animationDuration))
                     .Join(tile2.GetComponent<RectTransform>().DOAnchorPos(tile1Pos, animationDuration));
@@ -168,8 +167,6 @@ public class GameBoard : MonoBehaviour
 
         // --- 检查匹配与后续流程 ---
         bool extraTurn = FindAllMatches();
-
-        Debug.Log(matchedTiles.Count);
 
         if (matchedTiles.Count > 0)
         {
@@ -180,6 +177,7 @@ public class GameBoard : MonoBehaviour
         else
         {
             // 无效交换，换回来 (使用完全相反的逻辑)
+            AudioManager.Instance.PlaySFX(swapSound);
             allTiles[tile1.x, tile1.y] = tile2GO;
             allTiles[tile2.x, tile2.y] = tile1GO;
             (tile1.x, tile2.x) = (tile2.x, tile1.x);
@@ -284,12 +282,18 @@ public class GameBoard : MonoBehaviour
     }
 
     // --- 私有辅助方法 ---
-
     private bool FindAllMatches()
     {
         bool extraTurnGranted = false;
         matchedTiles.Clear();
+        HashSet<GameObject> foundMatches = new HashSet<GameObject>();
 
+        if (allTiles == null) return false;
+
+        bool[,] horizontalMatchGrid = new bool[width, height];
+        bool[,] verticalMatchGrid = new bool[width, height];
+
+        // --- 步骤 1: 查找并标记所有水平匹配 ---
         for (int y = 0; y < height; y++)
         {
             for (int x = 0; x < width - 2;)
@@ -298,20 +302,24 @@ public class GameBoard : MonoBehaviour
                 if (tile1 == null) { x++; continue; }
                 Sprite s1 = tile1.GetComponent<Tile>().squareSprite.sprite;
 
-                if (allTiles[x + 1, y] != null && allTiles[x + 2, y] != null &&
-                    allTiles[x + 1, y].GetComponent<Tile>().squareSprite.sprite == s1 &&
-                    allTiles[x + 2, y].GetComponent<Tile>().squareSprite.sprite == s1)
+                if (allTiles[x + 1, y] != null && allTiles[x + 1, y].GetComponent<Tile>().squareSprite.sprite == s1 &&
+                    allTiles[x + 2, y] != null && allTiles[x + 2, y].GetComponent<Tile>().squareSprite.sprite == s1)
                 {
                     int matchLength = 3;
                     for (int i = x + 3; i < width; i++)
                     {
-                        if (allTiles[i, y] != null && allTiles[i, y].GetComponent<Tile>().squareSprite.sprite == s1) matchLength++;
-                        else break;
+                        if (allTiles[i, y] != null && allTiles[i, y].GetComponent<Tile>().squareSprite.sprite == s1)
+                            matchLength++;
+                        else
+                            break;
                     }
+
+                    // 如果匹配长度>=4，授予额外回合
                     if (matchLength >= 4) extraTurnGranted = true;
+
                     for (int i = 0; i < matchLength; i++)
                     {
-                        if (!matchedTiles.Contains(allTiles[x + i, y])) matchedTiles.Add(allTiles[x + i, y]);
+                        horizontalMatchGrid[x + i, y] = true;
                     }
                     x += matchLength;
                 }
@@ -322,6 +330,7 @@ public class GameBoard : MonoBehaviour
             }
         }
 
+        // --- 步骤 2: 查找并标记所有垂直匹配 ---
         for (int x = 0; x < width; x++)
         {
             for (int y = 0; y < height - 2;)
@@ -330,20 +339,24 @@ public class GameBoard : MonoBehaviour
                 if (tile1 == null) { y++; continue; }
                 Sprite s1 = tile1.GetComponent<Tile>().squareSprite.sprite;
 
-                if (allTiles[x, y + 1] != null && allTiles[x, y + 2] != null &&
-                    allTiles[x, y + 1].GetComponent<Tile>().squareSprite.sprite == s1 &&
-                    allTiles[x, y + 2].GetComponent<Tile>().squareSprite.sprite == s1)
+                if (allTiles[x, y + 1] != null && allTiles[x, y + 1].GetComponent<Tile>().squareSprite.sprite == s1 &&
+                    allTiles[x, y + 2] != null && allTiles[x, y + 2].GetComponent<Tile>().squareSprite.sprite == s1)
                 {
                     int matchLength = 3;
                     for (int i = y + 3; i < height; i++)
                     {
-                        if (allTiles[x, i] != null && allTiles[x, i].GetComponent<Tile>().squareSprite.sprite == s1) matchLength++;
-                        else break;
+                        if (allTiles[x, i] != null && allTiles[x, i].GetComponent<Tile>().squareSprite.sprite == s1)
+                            matchLength++;
+                        else
+                            break;
                     }
+
+                    // 如果匹配长度>=4，授予额外回合
                     if (matchLength >= 4) extraTurnGranted = true;
+
                     for (int i = 0; i < matchLength; i++)
                     {
-                        if (!matchedTiles.Contains(allTiles[x, y + i])) matchedTiles.Add(allTiles[x, y + i]);
+                        verticalMatchGrid[x, y + i] = true;
                     }
                     y += matchLength;
                 }
@@ -354,7 +367,33 @@ public class GameBoard : MonoBehaviour
             }
         }
 
-        if (matchedTiles.Count >= 5) extraTurnGranted = true;
+        // --- 步骤 3: 检查L型/T型匹配并收集所有待消除的方块 ---
+        for (int x = 0; x < width; x++)
+        {
+            for (int y = 0; y < height; y++)
+            {
+                // 如果一个方块同时是水平和垂直匹配的一部分，则为L型/T型，授予额外回合
+                if (horizontalMatchGrid[x, y] && verticalMatchGrid[x, y])
+                {
+                    extraTurnGranted = true;
+                }
+
+                if (horizontalMatchGrid[x, y] || verticalMatchGrid[x, y])
+                {
+                    if (allTiles[x, y] != null)
+                    {
+                        foundMatches.Add(allTiles[x, y]);
+                    }
+                }
+            }
+        }
+
+        // 将找到的所有匹配项从HashSet复制到List
+        foreach (var tile in foundMatches)
+        {
+            matchedTiles.Add(tile);
+        }
+
         return extraTurnGranted;
     }
 

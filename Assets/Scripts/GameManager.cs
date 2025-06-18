@@ -46,7 +46,7 @@ public class GameManager : MonoBehaviour
     {
         currentTurn = Turn.Player;
         currentState = GameFlowState.PlayerTurn;
-        if (UIManager.Instance != null) UIManager.Instance.ShowTurnIndicator("你的回合", Color.cyan);
+        if (UIManager.Instance != null) UIManager.Instance.ShowPlayerTurn();
         StartCoroutine(GameBoard.Instance.CheckBoardStateRoutine());
         // CheckBoardStateRoutine 会在最后将GameBoard的状态设为 move
     }
@@ -56,7 +56,7 @@ public class GameManager : MonoBehaviour
         currentTurn = Turn.Enemy;
         currentState = GameFlowState.EnemyTurn;
         GameBoard.Instance.SetBoardState(GameBoard.GameState.wait);
-        if (UIManager.Instance != null) UIManager.Instance.ShowTurnIndicator("敌人回合", Color.red);
+        if (UIManager.Instance != null) UIManager.Instance.ShowEnemyTurn();
         StartCoroutine(EnemyTurnRoutine());
     }
 
@@ -66,7 +66,7 @@ public class GameManager : MonoBehaviour
 
         if (wasExtraTurn)
         {
-            if (UIManager.Instance != null) UIManager.Instance.ShowTurnIndicator("额外回合！", Color.yellow);
+            if (UIManager.Instance != null) UIManager.Instance.ShowExtraTurn();
             if (currentTurn == Turn.Player)
             {
                 SwitchToPlayerTurn();
