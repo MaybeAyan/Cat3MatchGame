@@ -5,7 +5,7 @@ using DG.Tweening;
 public class SettingsPanel : MonoBehaviour
 {
     public static SettingsPanel Instance;
-    
+
     [Header("UI控件引用")]
     public GameObject panelObject;
     public Slider bgmVolumeSlider;
@@ -47,8 +47,8 @@ public class SettingsPanel : MonoBehaviour
 
     private void LoadSettings()
     {
-        bgmVolumeSlider.value = PlayerPrefs.GetFloat(BGM_VOLUME_KEY, 1f);
-        sfxVolumeSlider.value = PlayerPrefs.GetFloat(SFX_VOLUME_KEY, 1f);
+        bgmVolumeSlider.value = PlayerPrefs.GetFloat(BGM_VOLUME_KEY, 0.1f); // 与AudioManager保持一致
+        sfxVolumeSlider.value = PlayerPrefs.GetFloat(SFX_VOLUME_KEY, 0.4f); // 与AudioManager保持一致
 
         // 【逻辑反转】加载静音状态。0代表静音(mute=true), 1代表有声(mute=false)。
         // 所以 Toggle.isOn 应该与 mute 的状态相反。
@@ -57,7 +57,7 @@ public class SettingsPanel : MonoBehaviour
 
         bool sfxMuted = PlayerPrefs.GetInt(SFX_MUTE_KEY, 0) == 1;
         sfxMuteToggle.isOn = !sfxMuted;
-        
+
         ApplyAllSettings();
     }
 
@@ -69,10 +69,10 @@ public class SettingsPanel : MonoBehaviour
         // 【逻辑反转】保存静音状态。当Toggle被勾选(isOn=true)时，代表“不静音”，应保存0。
         PlayerPrefs.SetInt(BGM_MUTE_KEY, !bgmMuteToggle.isOn ? 1 : 0); // Not IsOn -> Mute (1)
         PlayerPrefs.SetInt(SFX_MUTE_KEY, !sfxMuteToggle.isOn ? 1 : 0);
-        
+
         PlayerPrefs.Save();
     }
-    
+
     private void OnBGMVolumeChange(float value)
     {
         if (AudioManager.Instance != null)
@@ -104,7 +104,7 @@ public class SettingsPanel : MonoBehaviour
             AudioManager.Instance.sfxSource.mute = !isSoundOn;
         SaveSettings();
     }
-    
+
     private void ApplyAllSettings()
     {
         OnBGMVolumeChange(bgmVolumeSlider.value);
@@ -112,19 +112,19 @@ public class SettingsPanel : MonoBehaviour
         OnSFXVolumeChange(sfxVolumeSlider.value);
         OnSFXMuteChange(sfxMuteToggle.isOn);
     }
-    
+
     public void OpenPanel()
     {
         panelObject.SetActive(true);
         if (GameBoard.Instance != null)
             GameBoard.Instance.currentState = GameBoard.GameState.wait;
-        
+
         panelObject.transform.DOScale(1, 0.3f).From(0.5f).SetEase(Ease.OutBack);
     }
 
     public void ClosePanel()
     {
-       
+
         if (GameManager.Instance != null && GameManager.Instance.currentState == GameManager.GameFlowState.PlayerTurn)
         {
             if (GameBoard.Instance != null)
@@ -133,7 +133,8 @@ public class SettingsPanel : MonoBehaviour
             }
         }
 
-        panelObject.transform.DOScale(0, 0.3f).SetEase(Ease.InBack).OnComplete(() => {
+        panelObject.transform.DOScale(0, 0.3f).SetEase(Ease.InBack).OnComplete(() =>
+        {
             panelObject.SetActive(false);
         });
     }

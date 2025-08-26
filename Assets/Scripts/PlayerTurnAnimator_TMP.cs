@@ -1,23 +1,30 @@
 using UnityEngine;
-using TMPro; // ÒıÈë TextMeshPro µÄÃüÃû¿Õ¼ä
+using TMPro; // å¼•å…¥ TextMeshPro çš„å‘½åç©ºé—´
 using DG.Tweening;
 
 public class PlayerTurnAnimator_TMP : MonoBehaviour
 {
-    [Header("¶¯»­¶ÔÏóÒıÓÃ")]
+    [Header("ä¸»è¦ç»„ä»¶å¼•ç”¨")]
     public RectTransform mainContainer;
     public RectTransform cloudBoard;
     public TMP_Text notificationText;
 
-    [Header("¶¯»­²ÎÊı")]
-    public float boardEnterDuration = 0.5f;
-    public float letterFallDuration = 0.4f;
-    public float letterStaggerDelay = 0.1f;
-    public float finalPopStrength = 0.1f;
-    public float exitDuration = 0.3f;
+    [Header("åŠ¨ç”»å‚æ•°")]
+    public float boardEnterDuration = 0.8f;
+    public float letterFallDuration = 0.6f;
+    public float letterStaggerDelay = 0.05f;
+    public float finalScaleStrength = 0.05f;
+    public float exitDuration = 0.5f;
+
+    [Header("å‘¼å¸æé†’å‚æ•°")]
+    public float reminderDelay = 3f; // 3ç§’åå¼€å§‹æé†’
+    public float breatheStrength = 0.1f; // å‘¼å¸æ•ˆæœçš„å¼ºåº¦
+    public float breatheDuration = 1.5f; // ä¸€æ¬¡å‘¼å¸çš„æ—¶é•¿
 
     private Vector2 boardInitialOffscreenPos;
     private Sequence currentSequence;
+    private Sequence breatheSequence;
+    private float lastActionTime;
 
     void Awake()
     {
@@ -26,10 +33,21 @@ public class PlayerTurnAnimator_TMP : MonoBehaviour
         mainContainer.gameObject.SetActive(false);
     }
 
+    void Update()
+    {
+        // æ£€æŸ¥æ˜¯å¦éœ€è¦å¼€å§‹å‘¼å¸æé†’
+        if (mainContainer.gameObject.activeInHierarchy &&
+            Time.time - lastActionTime > reminderDelay &&
+            (breatheSequence == null || !breatheSequence.IsActive()))
+        {
+            StartBreatheReminder();
+        }
+    }
+
     /// <summary>
-    /// ²¥·Å¶¯»­£¬²¢´«ÈëÒªÏÔÊ¾µÄÎÄ×Ö
+    /// æ’­æ”¾åŠ¨ç”»ï¼Œæ˜¾ç¤ºç©å®¶å›åˆè¦æ˜¾ç¤ºçš„æ–‡å­—
     /// </summary>
-    /// <param name="textToShow">ÒªÏÔÊ¾µÄÎÄ±¾ÄÚÈİ</param>
+    /// <param name="textToShow">è¦æ˜¾ç¤ºçš„æ–‡æœ¬å†…å®¹</param>
     public void PlayAnimation(string textToShow)
     {
         Debug.Log(textToShow);
@@ -38,60 +56,120 @@ public class PlayerTurnAnimator_TMP : MonoBehaviour
             currentSequence.Kill();
         }
 
-        // --- ×¼±¸¹¤×÷ ---
+        // --- å‡†å¤‡é˜¶æ®µ ---
         mainContainer.gameObject.SetActive(true);
-        cloudBoard.anchoredPosition = boardInitialOffscreenPos;
-        notificationText.text = textToShow; // ÉèÖÃÎÄ±¾
-        notificationText.alpha = 0; // ³õÊ¼Ê±ÍêÈ«Í¸Ã÷
+        cloudBoard.anchoredPosition = Vector2.zero;
+        notificationText.text = textToShow;
+        notificationText.alpha = 0;
+        mainContainer.localScale = Vector3.one * 0.95f; // åˆå§‹ç•¥å°
 
-        // Ç¿ÖÆTextMeshProÁ¢¼´¸üĞÂ¼¸ºÎĞÅÏ¢£¬ÕâÑùÎÒÃÇ²ÅÄÜ·ÃÎÊµ½Ã¿¸ö×Ö·ûµÄÎ»ÖÃ
-        notificationText.ForceMeshUpdate();
-
-        // --- ´´½¨¶¯»­ĞòÁĞ ---
+        // --- åˆ›å»ºåŠ¨ç”»åºåˆ— ---
         currentSequence = DOTween.Sequence();
+        // æ•´ä½“æ·¡å…¥+è½»å¾®ç¼©æ”¾
+        currentSequence.Append(notificationText.DOFade(1, boardEnterDuration).SetEase(Ease.InOutQuad));
+        currentSequence.Join(mainContainer.DOScale(1.05f, boardEnterDuration * 0.7f).SetEase(Ease.InOutQuad))
+                        .Append(mainContainer.DOScale(1f, boardEnterDuration * 0.3f).SetEase(Ease.InOutQuad));
 
-        // 1. Ä¾°åÈë³¡
-        currentSequence.Append(cloudBoard.DOAnchorPos(Vector2.zero, boardEnterDuration).SetEase(Ease.OutBounce));
-
-        // 2. ÎÄ×Ö¶¯»­ (ºËĞÄ¼¼ÇÉ)
-        // ÎÒÃÇÈÃÎÄ×ÖÕûÌåµ­Èë£¬Í¬Ê±¸øÃ¿¸ö×Ö·ûÒ»¸ö´ÓÉÏµ½ÏÂµÄÎ»ÒÆ¶¯»­
-        currentSequence.Insert(0.2f, notificationText.DOFade(1, letterFallDuration));
-
-        TMP_TextInfo textInfo = notificationText.textInfo;
-        Debug.Log(textInfo);
-        for (int i = 0; i < textInfo.characterCount; i++)
-        {
-            if (!textInfo.characterInfo[i].isVisible) continue; // Ìø¹ı¿Õ¸ñµÈ²»¿É¼û×Ö·û
-
-            int charIndex = i;
-            // »ñÈ¡Ã¿¸ö×Ö·ûµÄ¶¥µã
-            var verts = textInfo.meshInfo[textInfo.characterInfo[charIndex].materialReferenceIndex].vertices;
-
-            // ÎªÃ¿¸ö×Ö·û´´½¨Ò»¸ö¶ÀÁ¢µÄÎ»ÒÆ¶¯»­
-            for (int j = 0; j < 4; j++)
-            {
-                var origPos = verts[textInfo.characterInfo[charIndex].vertexIndex + j];
-                var newPos = origPos + new Vector3(0, 50, 0); // ´ÓÉÏ·½50¸öµ¥Î»´¦¿ªÊ¼
-
-                DOTween.To(() => newPos, x => newPos = x, origPos, letterFallDuration)
-                    .SetDelay(0.2f + (charIndex * letterStaggerDelay)) // ÒÀ´ÎÑÓ³Ù
-                    .SetEase(Ease.OutBounce)
-                    .OnUpdate(() => {
-                        // ÔÚ¶¯»­Ã¿Ò»Ö¡¸üĞÂ¶¥µãÎ»ÖÃ
-                        var currentVerts = textInfo.meshInfo[textInfo.characterInfo[charIndex].materialReferenceIndex].vertices;
-                        currentVerts[textInfo.characterInfo[charIndex].vertexIndex + j] = newPos;
-                        notificationText.UpdateVertexData(TMP_VertexDataUpdateFlags.Vertices);
-                    });
-            }
-        }
-
-        // 3. ÕûÌå·Å´ó»Øµ¯
-        currentSequence.Append(mainContainer.DOPunchScale(new Vector3(finalPopStrength, finalPopStrength, 0), 0.4f, 10, 1));
+        // è®°å½•åŠ¨ç”»å¼€å§‹æ—¶é—´ï¼Œç”¨äºå‘¼å¸æé†’è®¡æ—¶
+        lastActionTime = Time.time;
+        StopBreatheReminder();
     }
 
-    // ÍË³¡¶¯»­¿ÉÒÔ¼ò»¯ÎªÕûÌå·É³ö
+    /// <summary>
+    /// ç®€å•æ–‡å­—å˜åŒ–ï¼ˆç”¨äºé¢å¤–å›åˆï¼Œä¸æ’­æ”¾å®Œæ•´å…¥åœºåŠ¨ç”»ï¼‰
+    /// </summary>
+    /// <param name="textToShow">è¦æ˜¾ç¤ºçš„æ–‡æœ¬å†…å®¹</param>
+    public void UpdateTextOnly(string textToShow)
+    {
+        Debug.Log("æ›´æ–°æ–‡å­—: " + textToShow);
+
+        // æ£€æŸ¥å®¹å™¨æ˜¯å¦å·²ç»æ¿€æ´»ï¼ˆè¯´æ˜ä¹‹å‰å·²ç»æœ‰æ­£å¸¸å›åˆæ˜¾ç¤ºï¼‰
+        bool wasAlreadyActive = mainContainer.gameObject.activeInHierarchy;
+
+        if (!wasAlreadyActive)
+        {
+            // å¦‚æœæ˜¯ç¬¬ä¸€æ¬¡æ˜¾ç¤ºé¢å¤–å›åˆï¼Œç›´æ¥æ¿€æ´»å®¹å™¨ï¼Œç”»æ¿ä½ç½®ä¿æŒåœ¨å±å¹•ä¸­å¤®
+            mainContainer.gameObject.SetActive(true);
+            cloudBoard.anchoredPosition = Vector2.zero;
+            notificationText.alpha = 1; // ç¡®ä¿æ–‡å­—å¯è§
+        }
+
+        // åœæ­¢å½“å‰åŠ¨ç”»å’Œå‘¼å¸æé†’
+        if (currentSequence != null && currentSequence.IsActive())
+        {
+            currentSequence.Kill();
+        }
+        StopBreatheReminder();
+
+        // ç®€å•çš„æ–‡å­—æ·¡å‡ºæ·¡å…¥æ•ˆæœï¼ˆç”»æ¿ä½ç½®ä¿æŒä¸å˜ï¼‰
+        currentSequence = DOTween.Sequence();
+        currentSequence.Append(notificationText.DOFade(0, 0.2f))
+                      .AppendCallback(() => notificationText.text = textToShow)
+                      .Append(notificationText.DOFade(1, 0.3f).SetEase(Ease.InOutQuad));
+
+        // è®°å½•åŠ¨ç”»å¼€å§‹æ—¶é—´
+        lastActionTime = Time.time;
+    }
+
+    /// <summary>
+    /// å¼€å§‹å‘¼å¸æé†’æ•ˆæœ
+    /// </summary>
+    private void StartBreatheReminder()
+    {
+        if (breatheSequence != null && breatheSequence.IsActive())
+            return;
+
+        breatheSequence = DOTween.Sequence();
+        breatheSequence.Append(mainContainer.DOScale(1f + breatheStrength, breatheDuration * 0.5f).SetEase(Ease.InOutSine))
+                      .Append(mainContainer.DOScale(1f, breatheDuration * 0.5f).SetEase(Ease.InOutSine))
+                      .SetLoops(-1); // æ— é™å¾ªç¯
+    }
+
+    /// <summary>
+    /// åœæ­¢å‘¼å¸æé†’æ•ˆæœ
+    /// </summary>
+    private void StopBreatheReminder()
+    {
+        if (breatheSequence != null && breatheSequence.IsActive())
+        {
+            breatheSequence.Kill();
+            // ç¡®ä¿å®¹å™¨ç¼©æ”¾å›åˆ°æ­£å¸¸å¤§å°
+            mainContainer.localScale = Vector3.one;
+        }
+    }
+
+    /// <summary>
+    /// é‡ç½®è¡ŒåŠ¨è®¡æ—¶å™¨ï¼ˆå½“ç©å®¶æœ‰æ“ä½œæ—¶è°ƒç”¨ï¼‰
+    /// </summary>
+    public void ResetActionTimer()
+    {
+        lastActionTime = Time.time;
+        StopBreatheReminder();
+    }
+
+    // é€€å‡ºåŠ¨ç”»ï¼Œç®€åŒ–ä¸ºæ·¡å‡º
     public void PlayExitAnimation()
     {
-        // ... (ÍË³¡¶¯»­Âß¼­¿ÉÒÔÀàËÆ£¬ÈÃÕû¸ömainContainer·É×ß»òµ­³ö)
+        if (currentSequence != null && currentSequence.IsActive())
+        {
+            currentSequence.Kill();
+        }
+
+        // åœæ­¢å‘¼å¸æé†’
+        StopBreatheReminder();
+
+        currentSequence = DOTween.Sequence();
+
+        // æ–‡å­—å…ˆæ·¡å‡º
+        currentSequence.Append(notificationText.DOFade(0, exitDuration * 0.4f).SetEase(Ease.InQuad));
+
+        // èƒŒæ™¯æ¿å‘ä¸Šæ»‘å‡º
+        currentSequence.Append(cloudBoard.DOAnchorPos(boardInitialOffscreenPos, exitDuration).SetEase(Ease.InQuart));
+
+        // åŠ¨ç”»å®Œæˆåéšè—å®¹å™¨
+        currentSequence.OnComplete(() =>
+        {
+            mainContainer.gameObject.SetActive(false);
+        });
     }
 }

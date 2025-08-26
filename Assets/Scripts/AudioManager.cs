@@ -32,16 +32,16 @@ public class AudioManager : MonoBehaviour
     {
         // 游戏开始时加载设置并应用
         LoadAndApplyAudioSettings();
-        PlayBGM(); 
+        PlayBGM();
     }
-    
+
     // 加载并应用音频设置的方法
     private void LoadAndApplyAudioSettings()
     {
         // 读取保存的音量和静音状态，如果不存在则使用默认值
-        float bgmVolume = PlayerPrefs.GetFloat("BGM_Volume", 1f);
-    
-        float sfxVolume = PlayerPrefs.GetFloat("SFX_Volume", 1f);
+        float bgmVolume = PlayerPrefs.GetFloat("BGM_Volume", 0.1f); // 降低背景音乐默认音量到30%
+
+        float sfxVolume = PlayerPrefs.GetFloat("SFX_Volume", 0.4f); // 音效默认音量设为70%
 
         // 将设置应用到 AudioSource 组件
         bgmSource.volume = bgmVolume;

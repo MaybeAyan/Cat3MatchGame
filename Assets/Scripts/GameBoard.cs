@@ -105,6 +105,12 @@ public class GameBoard : MonoBehaviour
     {
         if (currentState != GameState.move) return;
 
+        // 重置呼吸提醒计时器
+        if (UIManager.Instance?.notificationAnimator != null)
+        {
+            UIManager.Instance.notificationAnimator.ResetActionTimer();
+        }
+
         if (selectedTile == null)
         {
             selectedTile = clickedTile;

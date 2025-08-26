@@ -6,10 +6,10 @@ public class GameManager : MonoBehaviour
     public static GameManager Instance;
 
     public enum GameFlowState { Initializing, PlayerTurn, EnemyTurn, Resolving, Paused }
-    [Tooltip("½öÓÃÓÚµ÷ÊÔ¹Û²ì£¬ÇëÎğÊÖ¶¯ĞŞ¸Ä")]
+    [Tooltip("ç”¨äºè°ƒè¯•è§‚å¯Ÿï¼Œå¯ä»¥æ‰‹åŠ¨ä¿®æ”¹")]
     public GameFlowState currentState;
 
-    // TurnÃ¶¾ÙÏÖÔÚÊÇGameManagerµÄË½ÓĞ×´Ì¬£¬Íâ²¿ÎŞ·¨·ÃÎÊ
+    // Turnæšä¸¾ä»…ä½œä¸ºGameManagerçš„ç§æœ‰çŠ¶æ€ï¼Œå¤–éƒ¨æ— æ³•è®¿é—®
     private enum Turn { Player, Enemy };
     private Turn currentTurn;
 
@@ -30,7 +30,7 @@ public class GameManager : MonoBehaviour
         GameBoard.Instance.SetupBoard();
     }
 
-    // ÓÉGameBoardÔÚSetupBoardÍê³Éºóµ÷ÓÃ
+    // åœ¨GameBoardçš„SetupBoardå®Œæˆåè°ƒç”¨
     public void OnBoardSetupComplete()
     {
         StartCoroutine(StartFirstTurn());
@@ -42,13 +42,13 @@ public class GameManager : MonoBehaviour
         SwitchToPlayerTurn();
     }
 
-    private void SwitchToPlayerTurn()
+    private void SwitchToPlayerTurn(bool showUI = true)
     {
         currentTurn = Turn.Player;
         currentState = GameFlowState.PlayerTurn;
-        if (UIManager.Instance != null) UIManager.Instance.ShowPlayerTurn();
+        if (showUI && UIManager.Instance != null) UIManager.Instance.ShowPlayerTurn();
         StartCoroutine(GameBoard.Instance.CheckBoardStateRoutine());
-        // CheckBoardStateRoutine »áÔÚ×îºó½«GameBoardµÄ×´Ì¬ÉèÎª move
+        // CheckBoardStateRoutine ä¼šè®¾ç½®GameBoardçš„çŠ¶æ€è®¾ä¸º move
     }
 
     private void SwitchToEnemyTurn()
@@ -69,12 +69,12 @@ public class GameManager : MonoBehaviour
             if (UIManager.Instance != null) UIManager.Instance.ShowExtraTurn();
             if (currentTurn == Turn.Player)
             {
-                SwitchToPlayerTurn();
+                SwitchToPlayerTurn(false); // é¢å¤–å›åˆä¸æ˜¾ç¤ºUIï¼Œå› ä¸ºå·²ç»æ˜¾ç¤ºäº†"é¢å¤–å›åˆ"
                 // ANCHOR: AI_EXTRA_TURN
             }
             else
             {
-                // AI»ñµÃ¶îÍâ»ØºÏ£¬ÔÙ´ÎÆô¶¯ËüµÄĞĞ¶¯³ÌĞò
+                // AIè·å¾—é¢å¤–å›åˆï¼Œå†æ¬¡è¿è¡Œæ•Œäººå›åˆåˆ¤æ–­é€»è¾‘
                 StartCoroutine(EnemyTurnRoutine());
                 // ANCHOR_END: AI_EXTRA_TURN
             }
@@ -94,7 +94,7 @@ public class GameManager : MonoBehaviour
 
     private IEnumerator EnemyTurnRoutine()
     {
-        Debug.Log("<color=orange>µĞÈË»ØºÏ¿ªÊ¼£¬ÕıÔÚË¼¿¼...</color>");
+        Debug.Log("<color=orange>æ•Œäººå›åˆå¼€å§‹ï¼Œæ­£åœ¨æ€è€ƒ...</color>");
         yield return StartCoroutine(GameBoard.Instance.CheckBoardStateRoutine());
         yield return new WaitForSeconds(1.0f);
 
@@ -102,18 +102,18 @@ public class GameManager : MonoBehaviour
 
         if (bestMove.score > -1)
         {
-            Debug.Log($"<color=red>AI¾ö¶¨Ö´ĞĞÒÆ¶¯£¬·ÖÊı: {bestMove.score}</color>");
+            Debug.Log($"<color=red>AIå†³å®šæ‰§è¡Œç§»åŠ¨ï¼Œå¾—åˆ†: {bestMove.score}</color>");
             Tile t1 = GameBoard.Instance.allTiles[bestMove.x1, bestMove.y1].GetComponent<Tile>();
             Tile t2 = GameBoard.Instance.allTiles[bestMove.x2, bestMove.y2].GetComponent<Tile>();
 
-            // ¡¾ºËĞÄĞŞ¸´¡¿Ê¹ÓÃ yield return À´µÈ´ı½»»»Ğ­³ÌÖ´ĞĞÍê±Ï
-            // Õâ»áÊ¹ EnemyTurnRoutine ÔÚ´ËÔİÍ££¬Ö±µ½ÆåÅÌÉÏµÄËùÓĞÁ¬Ëø·´Ó¦¶¼½áÊø
+            // é‡è¦çš„ä¿®æ”¹ï¼šä½¿ç”¨ yield return æ¥ç­‰å¾…è¿™ä¸ªåç¨‹æ‰§è¡Œå®Œæ¯•
+            // è®©æˆ‘ä»¬ä½¿ EnemyTurnRoutine åœ¨æ­¤å¤„æš‚åœï¼Œç›´åˆ°ç©å®¶äº¤äº’ç³»ç»Ÿè°ƒç”¨ç›¸åº”çš„å›è°ƒ
             yield return GameBoard.Instance.StartCoroutine(GameBoard.Instance.SwapAndCheckRoutine(t1, t2));
         }
         else
         {
-            Debug.LogWarning("AIÕÒ²»µ½¿ÉÒÆ¶¯²½Êı£¬Ö±½Ó½øÈëÍæ¼Ò»ØºÏ");
-            SwitchToPlayerTurn(); // AIÌø¹ı»ØºÏ
+            Debug.LogWarning("AIæ‰¾ä¸åˆ°æœ‰æ•ˆç§»åŠ¨ï¼Œç›´æ¥è¿›å…¥ä¸‹ä¸€å›åˆ");
+            SwitchToPlayerTurn(); // AIè·³è¿‡å›åˆ
         }
     }
 }

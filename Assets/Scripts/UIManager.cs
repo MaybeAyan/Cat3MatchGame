@@ -1,6 +1,6 @@
 using System.Collections;
 using UnityEngine;
-using TMPro; // ÒıÈëTextMeshProµÄÃüÃû¿Õ¼ä
+using TMPro; // å¼•å…¥TextMeshProçš„å‘½åç©ºé—´
 using DG.Tweening;
 
 public class UIManager : MonoBehaviour
@@ -11,9 +11,9 @@ public class UIManager : MonoBehaviour
 
     public PlayerTurnAnimator_TMP notificationAnimator;
 
-    [Header("¶¯»­²ÎÊı")]
-    public float fadeDuration = 0.5f; // µ­Èëµ­³öÊ±³¤
-    public float displayDuration = 1.0f; // ÎÄ±¾Í£ÁôÊ±³¤
+    [Header("åŠ¨ç”»å‚æ•°")]
+    public float fadeDuration = 0.5f; // æ·¡å…¥æ·¡å‡ºæ—¶é—´
+    public float displayDuration = 1.0f; // æ–‡æœ¬åœç•™æ—¶é—´
 
     private void Awake()
     {
@@ -27,44 +27,45 @@ public class UIManager : MonoBehaviour
         }
     }
 
-    // Ò»¸öÍ¨ÓÃµÄ¡¢´ø¶¯»­µÄÌáÊ¾ĞÅÏ¢ÏÔÊ¾·½·¨
+    // ä¸€ä¸ªé€šç”¨çš„ã€å¯å¤ç”¨çš„æ¶ˆæ¯æ˜¾ç¤ºæ–¹æ³•
     public void ShowTurnIndicator(string message, Color color)
     {
-        // Èç¹ûµ±Ç°ÕıÔÚÏÔÊ¾£¬ÔòÏÈÍ£Ö¹¾ÉµÄ¶¯»­
+        // å¦‚æœå½“å‰æœ‰æ­£åœ¨æ˜¾ç¤ºçš„ï¼Œå…ˆåœæ­¢å·²æœ‰çš„åŠ¨ç”»
         turnIndicatorText.DOKill();
 
-        // ÉèÖÃÎÄ±¾ºÍÑÕÉ«
+        // è®¾ç½®æ–‡æœ¬å’Œé¢œè‰²
         turnIndicatorText.text = message;
         turnIndicatorText.color = color;
 
-        // ÏÈ½«AlphaÉèÎª0£¬Îªµ­Èë×ö×¼±¸
+        // å…ˆå°†Alphaè®¾ä¸º0ï¼Œä¸ºåŠ¨ç”»åšå‡†å¤‡
         turnIndicatorText.alpha = 0f;
         turnIndicatorText.gameObject.SetActive(true);
 
-        // ´´½¨Ò»¸öµ­Èë->Í£Áô->µ­³öµÄ¶¯»­ĞòÁĞ
+        // åˆ›å»ºä¸€ä¸ªæ·¡å…¥->åœç•™->æ·¡å‡ºçš„åŠ¨ç”»åºåˆ—
         Sequence sequence = DOTween.Sequence();
-        sequence.Append(turnIndicatorText.DOFade(1f, fadeDuration)) // µ­Èë
-                .AppendInterval(displayDuration) // Í£Áô
-                .Append(turnIndicatorText.DOFade(0f, fadeDuration)) // µ­³ö
-                .OnComplete(() =>
-                {
-                    // ¶¯»­½áÊøºó½ûÓÃ¶ÔÏó
-                    turnIndicatorText.gameObject.SetActive(false);
-                });
+        sequence.Append(turnIndicatorText.DOFade(1f, fadeDuration)) // æ·¡å…¥
+            .AppendInterval(displayDuration) // åœç•™
+            .Append(turnIndicatorText.DOFade(0f, fadeDuration)) // æ·¡å‡º
+                    .OnComplete(() =>
+                    {
+                        // åŠ¨ç”»å®Œæˆåéšè—å¯¹è±¡
+                        turnIndicatorText.gameObject.SetActive(false);
+                    });
     }
 
     public void ShowPlayerTurn()
     {
-        notificationAnimator.PlayAnimation("Íæ¼Ò»ØºÏ");
+        notificationAnimator.PlayAnimation("ç©å®¶å›åˆ");
     }
 
     public void ShowEnemyTurn()
     {
-        notificationAnimator.PlayAnimation("µĞÈË»ØºÏ");
+        notificationAnimator.PlayAnimation("æ•Œäººå›åˆ");
     }
 
     public void ShowExtraTurn()
     {
-        notificationAnimator.PlayAnimation("¶îÍâ»ØºÏ");
+        // é¢å¤–å›åˆä½¿ç”¨ç®€å•çš„æ–‡å­—å˜åŒ–ï¼Œä¸æ’­æ”¾å®Œæ•´åŠ¨ç”»
+        notificationAnimator.UpdateTextOnly("é¢å¤–å›åˆ");
     }
 }
